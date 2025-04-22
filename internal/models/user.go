@@ -11,7 +11,7 @@ import (
 type User struct {
 	ID        uuid.UUID      `json:"id"`
 	Username  string         `json:"username"`
-	Email     string         `json:"email"`
+	Email     sql.NullString `json:"email"`
 	Password  string         `json:"-"` // "-" means this field won't be included in JSON
 	Role      string         `json:"role"`
 	Language  sql.NullString `json:"language"`
@@ -21,13 +21,20 @@ type User struct {
 	UpdatedAt time.Time      `json:"updated_at"`
 }
 
+type UserResponse struct {
+	ID       uuid.UUID `json:"id"`
+	Username string    `json:"username"`
+	Role     string    `json:"role"`
+}
+
 type LoginRequest struct {
 	Username string `json:"username" binding:"required"`
 	Password string `json:"password" binding:"required"`
 }
 
 type LoginResponse struct {
-	Token string `json:"token"`
+	Token string       `json:"token"`
+	User  UserResponse `json:"user"`
 }
 
 type RegisterRequest struct {
@@ -92,8 +99,8 @@ type UpdateProfileRequest struct {
 
 // Claims represents the JWT claims
 type Claims struct {
-	UserID   string `json:"user_id"`
-	Username string `json:"username"`
-	Role     string `json:"role"`
+	UserID   uuid.UUID `json:"user_id"`
+	Username string    `json:"username"`
+	Role     string    `json:"role"`
 	jwt.RegisteredClaims
 }

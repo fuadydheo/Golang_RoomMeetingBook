@@ -95,6 +95,15 @@ func main() {
 	dashboardService := services.NewDashboardService()
 	dashboardHandler := handlers.NewDashboardHandler(dashboardService)
 
+	reservationService := services.NewReservationService()
+	reservationHandler := handlers.NewReservationHandler(reservationService)
+
+	roomService := services.NewRoomService()
+	roomHandler := handlers.NewRoomHandler(roomService)
+
+	snackService := services.NewSnackService()
+	snackHandler := handlers.NewSnackHandler(snackService)
+
 	// Setup Gin router
 	router := gin.Default()
 
@@ -108,11 +117,17 @@ func main() {
 
 	// Protected routes (requires authentication)
 	protected := router.Group("")
-	protected.Use(middleware.AuthMiddleware())
+	protected.Use(middleware.JWTAuthMiddleware())
 	{
 		protected.GET("/users/:id", userHandler.GetProfile)
 		protected.POST("/users/:id", userHandler.UpdateProfile)
 		protected.GET("/dashboard", dashboardHandler.GetDashboardStats)
+		protected.GET("/rooms", roomHandler.GetRooms)
+		protected.GET("/rooms/:id/schedule", roomHandler.GetRoomSchedule)
+		protected.GET("/snacks", snackHandler.GetSnacks)
+		protected.POST("/reservation/calculation", reservationHandler.CalculateReservationCost)
+		protected.POST("/reservation", reservationHandler.CreateReservation)
+		protected.GET("/reservation/history", reservationHandler.GetReservationHistory)
 	}
 
 	// Admin routes group
@@ -123,11 +138,20 @@ func main() {
 
 		// Protected admin routes - requires admin role
 		adminProtected := adminRoutes.Group("")
-		adminProtected.Use(middleware.AuthMiddleware())
-		adminProtected.Use(middleware.AdminOnlyMiddleware(viper.GetString("JWT_SECRET_KEY")))
+		adminProtected.Use(middleware.JWTAuthMiddleware())
+		adminProtected.Use(middleware.AdminOnlyMiddleware())
 		{
+			// Dashboard routes
 			adminProtected.GET("/dashboard", dashboardHandler.GetDashboardStats)
-			// Add more admin-only routes here
+
+			// Reservation management
+			adminProtected.GET("/reservations/history", reservationHandler.GetReservationHistory)
+			adminProtected.POST("/reservation/status", reservationHandler.UpdateReservationStatus)
+
+			// Room management
+			adminProtected.POST("/rooms", roomHandler.CreateRoom)       // Create room
+			adminProtected.PUT("/rooms/:id", roomHandler.UpdateRoom)    // Update room
+			adminProtected.DELETE("/rooms/:id", roomHandler.DeleteRoom) // Delete room
 		}
 	}
 

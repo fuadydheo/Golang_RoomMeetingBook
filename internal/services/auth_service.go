@@ -3,6 +3,7 @@ package services
 import (
 	"crypto/rand"
 	"database/sql"
+	"e-meetingproject/internal/auth"
 	"e-meetingproject/internal/database"
 	"e-meetingproject/internal/models"
 	"encoding/base64"
@@ -83,56 +84,53 @@ func (s *AuthService) Register(req *models.RegisterRequest) (*models.RegisterRes
 }
 
 func (s *AuthService) Login(username, password string) (*models.LoginResponse, error) {
-	var user struct {
-		ID       uuid.UUID
-		Username string
-		Password string
-		Role     string
-	}
-
-	err := s.db.QueryRow(
-		"SELECT id, username, password, role FROM users WHERE username = $1 AND status = 'active'",
-		username,
-	).Scan(&user.ID, &user.Username, &user.Password, &user.Role)
+	var user models.User
+	err := s.db.QueryRow(`
+		SELECT id, username, password, role 
+		FROM users 
+		WHERE username = $1
+	`, username).Scan(&user.ID, &user.Username, &user.Password, &user.Role)
 
 	if err != nil {
 		if err == sql.ErrNoRows {
-			fmt.Printf("No user found with username: %s\n", username)
-			return nil, errors.New("invalid credentials")
+			return nil, fmt.Errorf("invalid credentials")
 		}
-		fmt.Printf("Database error: %v\n", err)
 		return nil, fmt.Errorf("database error: %v", err)
 	}
 
-	// Compare password with hashed password
-	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password)); err != nil {
-		fmt.Printf("Password mismatch for user: %s\n", username)
-		return nil, errors.New("invalid credentials")
-	}
-
-	// Get JWT configuration from environment
-	secretKey := []byte(viper.GetString("JWT_SECRET_KEY"))
-	expirationHours := viper.GetInt("JWT_EXPIRATION_HOURS")
-	if expirationHours == 0 {
-		expirationHours = 24 // Default to 24 hours if not set
-	}
-
-	// Create JWT token with role claim
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"user_id":  user.ID.String(),
-		"username": user.Username,
-		"role":     user.Role,
-		"exp":      time.Now().Add(time.Hour * time.Duration(expirationHours)).Unix(),
-	})
-
-	tokenString, err := token.SignedString(secretKey)
+	// Compare passwords
+	err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password))
 	if err != nil {
-		fmt.Printf("Error generating token: %v\n", err)
-		return nil, errors.New("error generating token")
+		return nil, fmt.Errorf("invalid credentials")
+	}
+
+	// Create claims
+	claims := &auth.Claims{
+		UserID:   user.ID,
+		Username: user.Username,
+		Role:     user.Role,
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(24 * time.Hour)),
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
+		},
+	}
+
+	// Create token
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+
+	// Sign and get the complete encoded token as a string
+	tokenString, err := token.SignedString([]byte(viper.GetString("JWT_SECRET_KEY")))
+	if err != nil {
+		return nil, fmt.Errorf("error creating token: %v", err)
 	}
 
 	return &models.LoginResponse{
 		Token: tokenString,
+		User: models.UserResponse{
+			ID:       user.ID,
+			Username: user.Username,
+			Role:     user.Role,
+		},
 	}, nil
 }
 

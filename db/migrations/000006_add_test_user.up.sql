@@ -1,3 +1,4 @@
+
 -- Password is 'password123'
 INSERT INTO users (username, email, password, role, status)
 VALUES (
