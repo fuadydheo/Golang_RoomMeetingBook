@@ -11,7 +11,7 @@ type Room struct {
 	Name         string    `json:"name" binding:"required"`
 	Capacity     int       `json:"capacity" binding:"required,min=1"`
 	PricePerHour float64   `json:"price_per_hour" binding:"required,min=0"`
-	Status       string    `json:"status" binding:"required,oneof=active inactive"`
+	Status       string    `json:"status" binding:"required,oneof=available maintenance occupied"`
 	CreatedAt    time.Time `json:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at"`
 }
@@ -20,14 +20,14 @@ type CreateRoomRequest struct {
 	Name         string  `json:"name" binding:"required"`
 	Capacity     int     `json:"capacity" binding:"required,min=1"`
 	PricePerHour float64 `json:"price_per_hour" binding:"required,min=0"`
-	Status       string  `json:"status" binding:"required,oneof=active inactive"`
+	Status       string  `json:"status" binding:"required,oneof=available maintenance occupied"`
 }
 
 type UpdateRoomRequest struct {
 	Name         *string  `json:"name,omitempty"`
 	Capacity     *int     `json:"capacity,omitempty" binding:"omitempty,min=1"`
 	PricePerHour *float64 `json:"price_per_hour,omitempty" binding:"omitempty,min=0"`
-	Status       *string  `json:"status,omitempty" binding:"omitempty,oneof=active inactive"`
+	Status       *string  `json:"status,omitempty" binding:"omitempty,oneof=available maintenance occupied"`
 }
 
 type RoomFilter struct {
@@ -35,7 +35,7 @@ type RoomFilter struct {
 	RoomTypeID  *uuid.UUID `json:"room_type_id,omitempty"`
 	MinCapacity *int       `json:"min_capacity,omitempty"`
 	MaxCapacity *int       `json:"max_capacity,omitempty"`
-	Status      *string    `json:"status,omitempty"` // active, inactive
+	Status      *string    `json:"status,omitempty"` // available, maintenance, occupied
 }
 
 type PaginationQuery struct {

@@ -128,6 +128,7 @@ func main() {
 		protected.POST("/reservation/calculation", reservationHandler.CalculateReservationCost)
 		protected.POST("/reservation", reservationHandler.CreateReservation)
 		protected.GET("/reservation/history", reservationHandler.GetReservationHistory)
+		protected.GET("/reservation/:id", reservationHandler.GetReservationByID)
 	}
 
 	// Admin routes group

@@ -3,6 +3,7 @@ package handlers
 import (
 	"e-meetingproject/internal/models"
 	"e-meetingproject/internal/services"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -103,6 +104,28 @@ func (h *ReservationHandler) CalculateReservationCost(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, response)
+}
+
+func (h *ReservationHandler) GetReservationByID(c *gin.Context) {
+	// Parse reservation ID from URL
+	reservationID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid reservation ID format"})
+		return
+	}
+
+	// Get reservation details from service
+	reservation, err := h.service.GetReservationByID(reservationID)
+	if err != nil {
+		if err.Error() == "reservation not found" {
+			c.JSON(http.StatusNotFound, gin.H{"error": "reservation not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("error fetching reservation: %v", err)})
+		return
+	}
+
+	c.JSON(http.StatusOK, reservation)
 }
 
 func (h *ReservationHandler) CreateReservation(c *gin.Context) {

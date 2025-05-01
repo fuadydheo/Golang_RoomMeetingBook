@@ -285,6 +285,28 @@ func (s *ReservationService) UpdateReservationStatus(req *models.UpdateReservati
 }
 
 func (s *ReservationService) CalculateReservationCost(req *models.ReservationCalculationRequest) (*models.ReservationCalculationResponse, error) {
+	// Validate time constraints
+	now := time.Now()
+
+	// Ensure start time is in the future
+	if req.StartTime.Before(now) {
+		return nil, fmt.Errorf("reservation start time must be in the future")
+	}
+
+	// Ensure end time is after start time
+	if !req.EndTime.After(req.StartTime) {
+		return nil, fmt.Errorf("reservation end time must be after start time")
+	}
+
+	// Validate minimum and maximum duration
+	duration := req.EndTime.Sub(req.StartTime)
+	if duration < 30*time.Minute {
+		return nil, fmt.Errorf("reservation must be at least 30 minutes long")
+	}
+	if duration > 24*time.Hour {
+		return nil, fmt.Errorf("reservation cannot exceed 24 hours")
+	}
+
 	// Start transaction
 	tx, err := s.db.Begin()
 	if err != nil {
@@ -301,7 +323,7 @@ func (s *ReservationService) CalculateReservationCost(req *models.ReservationCal
 	err = tx.QueryRow(`
 		SELECT id, name, price_per_hour
 		FROM rooms
-		WHERE id = $1 AND status = 'active'
+		WHERE id = $1 AND status = 'available'
 	`, req.RoomID).Scan(&room.ID, &room.Name, &room.PricePerHour)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -311,8 +333,8 @@ func (s *ReservationService) CalculateReservationCost(req *models.ReservationCal
 	}
 
 	// Calculate room cost
-	duration := req.EndTime.Sub(req.StartTime)
-	hours := duration.Hours()
+	bookingDuration := req.EndTime.Sub(req.StartTime)
+	hours := bookingDuration.Hours()
 	roomCost := room.PricePerHour * hours
 
 	// Get snack details and calculate costs
@@ -423,7 +445,131 @@ func (s *ReservationService) CalculateReservationCost(req *models.ReservationCal
 	return response, nil
 }
 
+func (s *ReservationService) GetReservationByID(id uuid.UUID) (*models.ReservationDetailResponse, error) {
+	// Start transaction
+	tx, err := s.db.Begin()
+	if err != nil {
+		return nil, fmt.Errorf("error starting transaction: %v", err)
+	}
+	defer tx.Rollback()
+
+	// Get reservation details with room and user information
+	var reservation models.ReservationDetailResponse
+	var createdAt, updatedAt time.Time
+
+	err = tx.QueryRow(`
+		SELECT 
+			r.id, r.status, r.start_time, r.end_time, r.visitor_count, r.price, r.created_at, r.updated_at,
+			rm.id, rm.name, rm.capacity, rm.price_per_hour,
+			u.id, u.username
+		FROM reservations r
+		JOIN rooms rm ON r.room_id = rm.id
+		JOIN users u ON r.user_id = u.id
+		WHERE r.id = $1
+	`, id).Scan(
+		&reservation.ID, &reservation.Status, &reservation.StartTime, &reservation.EndTime,
+		&reservation.VisitorCount, &reservation.Price, &createdAt, &updatedAt,
+		&reservation.Room.ID, &reservation.Room.Name, &reservation.Room.Capacity, &reservation.Room.PricePerHour,
+		&reservation.User.ID, &reservation.User.Username,
+	)
+
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("reservation not found")
+		}
+		return nil, fmt.Errorf("error fetching reservation: %v", err)
+	}
+
+	reservation.CreatedAt = createdAt
+	reservation.UpdatedAt = updatedAt
+
+	// Get snacks for this reservation
+	rows, err := tx.Query(`
+		SELECT 
+			s.id, s.name, s.category, rs.price, rs.quantity
+		FROM reservation_snacks rs
+		JOIN snacks s ON rs.snack_id = s.id
+		WHERE rs.reservation_id = $1
+	`, id)
+
+	if err != nil {
+		return nil, fmt.Errorf("error fetching reservation snacks: %v", err)
+	}
+	defer rows.Close()
+
+	var totalSnackCost float64
+	for rows.Next() {
+		var snack struct {
+			ID       uuid.UUID
+			Name     string
+			Category string
+			Price    float64
+			Quantity int
+		}
+
+		err := rows.Scan(&snack.ID, &snack.Name, &snack.Category, &snack.Price, &snack.Quantity)
+		if err != nil {
+			return nil, fmt.Errorf("error scanning snack: %v", err)
+		}
+
+		subtotal := snack.Price * float64(snack.Quantity)
+		totalSnackCost += subtotal
+
+		reservation.Snacks = append(reservation.Snacks, struct {
+			ID       uuid.UUID `json:"id"`
+			Name     string    `json:"name"`
+			Category string    `json:"category"`
+			Price    float64   `json:"price"`
+			Quantity int       `json:"quantity"`
+			Subtotal float64   `json:"subtotal"`
+		}{
+			ID:       snack.ID,
+			Name:     snack.Name,
+			Category: snack.Category,
+			Price:    snack.Price,
+			Quantity: snack.Quantity,
+			Subtotal: subtotal,
+		})
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating snacks: %v", err)
+	}
+
+	// Calculate total cost (room cost + snack cost)
+	reservation.TotalCost = reservation.Price
+
+	// Commit transaction
+	if err = tx.Commit(); err != nil {
+		return nil, fmt.Errorf("error committing transaction: %v", err)
+	}
+
+	return &reservation, nil
+}
+
 func (s *ReservationService) CreateReservation(req *models.CreateReservationRequest) (*models.CreateReservationResponse, error) {
+	// Validate time constraints
+	now := time.Now()
+
+	// Ensure start time is in the future
+	if req.StartTime.Before(now) {
+		return nil, fmt.Errorf("reservation start time must be in the future")
+	}
+
+	// Ensure end time is after start time
+	if !req.EndTime.After(req.StartTime) {
+		return nil, fmt.Errorf("reservation end time must be after start time")
+	}
+
+	// Validate minimum and maximum duration
+	duration := req.EndTime.Sub(req.StartTime)
+	if duration < 30*time.Minute {
+		return nil, fmt.Errorf("reservation must be at least 30 minutes long")
+	}
+	if duration > 24*time.Hour {
+		return nil, fmt.Errorf("reservation cannot exceed 24 hours")
+	}
+
 	// Start transaction
 	tx, err := s.db.Begin()
 	if err != nil {
@@ -437,7 +583,7 @@ func (s *ReservationService) CreateReservation(req *models.CreateReservationRequ
 	err = tx.QueryRow(`
 		SELECT capacity, price_per_hour
 		FROM rooms
-		WHERE id = $1 AND status = 'active'
+		WHERE id = $1 AND status = 'available'
 	`, req.RoomID).Scan(&roomCapacity, &pricePerHour)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -472,8 +618,8 @@ func (s *ReservationService) CreateReservation(req *models.CreateReservationRequ
 	}
 
 	// Calculate room cost
-	duration := req.EndTime.Sub(req.StartTime)
-	hours := duration.Hours()
+	bookingDuration := req.EndTime.Sub(req.StartTime)
+	hours := bookingDuration.Hours()
 	roomCost := pricePerHour * hours
 
 	// Get snack details and calculate costs

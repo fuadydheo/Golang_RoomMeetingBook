@@ -73,9 +73,9 @@ type ReservationCalculationRequest struct {
 	Snacks []struct {
 		SnackID  uuid.UUID `json:"snack_id" binding:"required"`
 		Quantity int       `json:"quantity" binding:"required,min=1"`
-	} `json:"snacks" binding:"required"`
+	} `json:"snacks" binding:"required,dive"`
 	StartTime time.Time `json:"start_time" binding:"required"`
-	EndTime   time.Time `json:"end_time" binding:"required"`
+	EndTime   time.Time `json:"end_time" binding:"required,gtfield=StartTime"`
 }
 
 type ReservationCalculationResponse struct {
@@ -101,12 +101,12 @@ type CreateReservationRequest struct {
 	RoomID       uuid.UUID `json:"room_id" binding:"required"`
 	UserID       uuid.UUID `json:"user_id" binding:"required"`
 	StartTime    time.Time `json:"start_time" binding:"required"`
-	EndTime      time.Time `json:"end_time" binding:"required"`
+	EndTime      time.Time `json:"end_time" binding:"required,gtfield=StartTime"`
 	VisitorCount int       `json:"visitor_count" binding:"required,min=1"`
 	Snacks       []struct {
 		SnackID  uuid.UUID `json:"snack_id" binding:"required"`
 		Quantity int       `json:"quantity" binding:"required,min=1"`
-	} `json:"snacks" binding:"required"`
+	} `json:"snacks" binding:"required,dive"`
 }
 
 type CreateReservationResponse struct {
