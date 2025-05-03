@@ -153,6 +153,9 @@ func main() {
 			adminProtected.POST("/rooms", roomHandler.CreateRoom)       // Create room
 			adminProtected.PUT("/rooms/:id", roomHandler.UpdateRoom)    // Update room
 			adminProtected.DELETE("/rooms/:id", roomHandler.DeleteRoom) // Delete room
+
+			// Snack management
+			adminProtected.POST("/snacks", snackHandler.CreateSnack) // Create snack
 		}
 	}
 

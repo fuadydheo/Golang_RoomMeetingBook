@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"e-meetingproject/internal/models"
 	"e-meetingproject/internal/services"
 	"net/http"
 
@@ -26,4 +27,27 @@ func (h *SnackHandler) GetSnacks(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, response)
+}
+
+func (h *SnackHandler) CreateSnack(c *gin.Context) {
+	var req models.CreateSnackRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Validate price is positive
+	if req.Price <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "price must be greater than zero"})
+		return
+	}
+
+	// Create snack
+	response, err := h.service.CreateSnack(&req)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusCreated, response)
 }

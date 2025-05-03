@@ -5,6 +5,9 @@ import (
 	"e-meetingproject/internal/database"
 	"e-meetingproject/internal/models"
 	"fmt"
+	"time"
+
+	"github.com/google/uuid"
 )
 
 type SnackService struct {
@@ -64,5 +67,41 @@ func (s *SnackService) GetSnacks() (*models.SnackListResponse, error) {
 
 	return &models.SnackListResponse{
 		Snacks: snacks,
+	}, nil
+}
+
+func (s *SnackService) CreateSnack(req *models.CreateSnackRequest) (*models.CreateSnackResponse, error) {
+	// Start transaction
+	tx, err := s.db.Begin()
+	if err != nil {
+		return nil, fmt.Errorf("error starting transaction: %v", err)
+	}
+	defer tx.Rollback()
+
+	// Generate new UUID for the snack
+	snackID := uuid.New()
+	createdAt := time.Now()
+
+	// Insert new snack
+	_, err = tx.Exec(`
+		INSERT INTO snacks (id, name, category, price, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $5)
+	`, snackID, req.Name, req.Category, req.Price, createdAt)
+
+	if err != nil {
+		return nil, fmt.Errorf("error creating snack: %v", err)
+	}
+
+	// Commit transaction
+	if err = tx.Commit(); err != nil {
+		return nil, fmt.Errorf("error committing transaction: %v", err)
+	}
+
+	return &models.CreateSnackResponse{
+		ID:        snackID,
+		Name:      req.Name,
+		Category:  req.Category,
+		Price:     req.Price,
+		CreatedAt: createdAt,
 	}, nil
 }
